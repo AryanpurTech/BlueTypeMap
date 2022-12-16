@@ -2,6 +2,12 @@
 name = "blue_typemap"
 version = "1.0.0"
 edition = "2021"
+authors = ["Elham Aryanpur <elhamaryanpur5@gmail.com>"]
+description = "A TypeMap Dependency Injection method for dynamic function parameters"
+repository = "https://github.com/AryanpurTech/BlueTypeMap"
+keywords = ["api", "parsing", "generator"]
+categories = ["accessibility"]
+license = "Apache-2.0"
 
 [lib]
 name = "blue_typemap"
@@ -10,7 +16,7 @@ name = "blue_typemap"
 criterion = "0.4.0"
 
 [[bench]]
-name = "my_benchmark"
+name = "time_bench"
 harness = false
 
 [dependencies]
