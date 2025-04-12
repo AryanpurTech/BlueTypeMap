@@ -1,9 +1,15 @@
+use parking_lot::{Mutex, MutexGuard};
+use rustc_hash::FxHashMap;
 use std::{
     any::{Any, TypeId},
-    collections::HashMap,
     ops::{Deref, DerefMut},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::Arc,
 };
+
+#[cfg(not(feature = "send"))]
+type DataType = Box<dyn Any>;
+#[cfg(feature = "send")]
+type DataType = Arc<dyn Any + Send + Sync>;
 
 // TypeMap is our dependency "container" and provides us with ways to store and retrieve some value
 // bound to its type.
@@ -12,13 +18,19 @@ use std::{
 // length of up to twelve.
 #[derive(Default)]
 pub struct TypeMap {
-    bindings: HashMap<TypeId, Box<dyn Any>>,
+    bindings: FxHashMap<TypeId, DataType>,
 }
 
 impl TypeMap {
     // bind stores the given value against its type within the container.
-    pub fn bind<T: Any>(&mut self, val: T) {
-        self.bindings.insert(val.type_id(), Box::new(val));
+    pub fn bind<T: Any + Send + Sync>(&mut self, val: T) {
+        self.bindings.insert(
+            val.type_id(),
+            #[cfg(not(feature = "send"))]
+            Box::new(val),
+            #[cfg(feature = "send")]
+            Arc::new(val),
+        );
     }
 
     // get retrieves a reference to the value stored against the given type.
@@ -26,6 +38,10 @@ impl TypeMap {
         self.bindings
             .get(&TypeId::of::<T>())
             .and_then(|boxed| boxed.downcast_ref())
+    }
+
+    pub fn try_get<T: Any>(&self) -> Result<&T, &'static str> {
+        self.get::<T>().ok_or("Type not found")
     }
 
     // call calls the given callable with its arguments resolved from the values bound to their
@@ -97,13 +113,13 @@ impl<T: ?Sized> Deref for DataMut<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        &*self.0
+        &self.0
     }
 }
 
 impl<T: ?Sized> DerefMut for DataMut<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        &mut *self.0
+        &mut self.0
     }
 }
 
@@ -114,8 +130,7 @@ impl<'a, T: ?Sized + 'static> FromTypeMap<'a> for DataMut<'a, T> {
                 .get::<DataMutStorage<T>>()
                 .expect("type not found")
                 .0
-                .lock()
-                .unwrap(),
+                .lock(),
         )
     }
 }
@@ -175,9 +190,7 @@ macro_rules! tuple_from_tm {
     }
 
 impl FromTypeMap<'_> for () {
-    fn from_type_map(_type_map: &TypeMap) -> Self {
-        ()
-    }
+    fn from_type_map(_type_map: &TypeMap) -> Self {}
 }
 tuple_from_tm! { A }
 tuple_from_tm! { A B }
